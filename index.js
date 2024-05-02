@@ -42,7 +42,7 @@ cloudinary.config({
 });
 
 // app.use(cors({credentials:true,origin:'http://localhost:3000'}));
-app.use(cors({credentials:true,origin:'https://joel-photography.vercel.org'}));
+app.use(cors({credentials:true,origin:'https://joel-photography.vercel.app'}));
 app.use(express.json());
 app.use(cookieParser());
 // app.use('/uploads', express.static(__dirname + '/uploads'))
