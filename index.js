@@ -41,7 +41,8 @@ cloudinary.config({
   api_secret: '-mnTD9Y96yxJLY_SESRwp34Gb38', // JWT Secret
 });
 
-app.use(cors({credentials:true,origin:'http://localhost:3000'}));
+// app.use(cors({credentials:true,origin:'http://localhost:3000'}));
+app.use(cors({credentials:true,origin:'https://joel-photography.vercel.org'}));
 app.use(express.json());
 app.use(cookieParser());
 // app.use('/uploads', express.static(__dirname + '/uploads'))
@@ -471,7 +472,7 @@ app.post('/upload/:brandId', uploadMiddleware.single('image'), async (req, res) 
       folder: 'portfolio'
     });
 
-    const productId = new ObjectId();
+    const productId = new Date().getTime();
 
     // Create a new portfolio entry for the image
     const portfolio = new Portfolio({
