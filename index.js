@@ -167,11 +167,10 @@ app.delete('/post/:id', async (req, res) => {
 // CONTACT FORM
 app.post('/contact', async (req, res) => {
   try {
-    const { fullName, email, subject, message } = req.body;
+    const { fullName, email, message } = req.body;
     const formEntry = new Contact({
       fullName,
       email,
-      subject,
       message,
     });
     await formEntry.save();
