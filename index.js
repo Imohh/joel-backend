@@ -16,7 +16,8 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const multer = require('multer');
+// const multer = require('multer');
+const Multer = require('multer')
 const fs = require('fs');
 const cloudinary = require('cloudinary').v2
 
@@ -24,15 +25,20 @@ const salt = bcrypt.genSaltSync(10);
 const secret = 'asdfe45we45w345wegw345werjktjwertkj';
 
 
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    cb(null, 'uploads/');
-  },
-  filename(req, file, cb) {
-    cb(null, `${Date.now()}.jpg`);
-  },
-})
-const uploadMiddleware = multer({ storage });
+// const storage = multer.diskStorage({
+//   destination(req, file, cb) {
+//     cb(null, 'uploads/');
+//   },
+//   filename(req, file, cb) {
+//     cb(null, `${Date.now()}.jpg`);
+//   },
+// })
+// const uploadMiddleware = multer({ storage });
+
+const storage = new Multer.memoryStorage();
+const uploadMiddleware = Multer({
+  storage,
+});
 
 // CLOUDINARY SETUP
 cloudinary.config({
@@ -93,7 +99,7 @@ app.get('/profile', (req,res) => {
 
 app.post('/post', uploadMiddleware.single('file'), async (req,res) => {
   try {
-    const {title,summary,content} = req.body;
+    const {name,summary,amount} = req.body;
     const cover = req.file.path
 
     console.log(cover)
@@ -101,10 +107,13 @@ app.post('/post', uploadMiddleware.single('file'), async (req,res) => {
         folder: 'blog'
     });
 
+    const productId = new Date().getTime();
+
     const postDoc = await Post.create({
-      title,
+      id: productId,
+      name,
       summary,
-      content,
+      amount,
       cover: result.url,
     });
 
@@ -127,11 +136,11 @@ app.put('/post',uploadMiddleware.single('file'), async (req,res) => {
     fs.renameSync(path, newPath);
   }
   
-    const {id,title,summary,content} = req.body;
+    const {id,name,summary,content} = req.body;
     const postDoc = await Post.findById(id);
 
     postDoc.update({
-      title,
+      name,
       summary,
       content,
       cover: newPath ? newPath : postDoc.cover,
@@ -455,11 +464,12 @@ app.delete('/uploads/:id', async (req, res) => {
 app.post('/upload/:brandId', uploadMiddleware.single('image'), async (req, res) => {
   try {
     const brandId = req.params.brandId;
-    const image = req.file.path;
+    const image = req.file.buffer;
     const contentType = req.file.mimetype;
     const { name, description, amount, quantity } = req.body;
 
-    console.log(image)
+    const b64Image = Buffer.from(image).toString('base64');
+    const dataURI = `data:${contentType};base64,${b64Image}`;
 
     // Ensure the brand exists
     const brand = await Brand.findById(brandId);
@@ -467,8 +477,9 @@ app.post('/upload/:brandId', uploadMiddleware.single('image'), async (req, res) 
       return res.status(404).json({ error: 'Brand not found' });
     }
 
-    const result = await cloudinary.uploader.upload(image, {
-      folder: 'portfolio'
+    const result = await cloudinary.uploader.upload(dataURI, {
+      folder: 'portfolio',
+      resource_type: 'auto',
     });
 
     const productId = new Date().getTime();
@@ -528,8 +539,8 @@ app.get('/upload', async (req,res) => {
     const portfolioData = portfolios.map((portfolio) => ({
       id: portfolio._id,
       image: portfolio.image,
-      brand: portfolio.brand._id,
-      brandName: portfolio.brand.name, // Include the brand name
+      brand: portfolio.brand ? portfolio.brand._id : null, // Check if brand is not null before accessing _id
+      brandName: portfolio.brand ? portfolio.brand.name : null, // Include the brand name if available
       amount: portfolio.amount,
       name: portfolio.name,
       description: portfolio.description,
@@ -541,6 +552,27 @@ app.get('/upload', async (req,res) => {
     res.status(500).json({ error: 'An error occurred' });
   }
 })
+
+
+// app.get('/upload', async (req,res) => {
+//   try {
+//     const portfolios = await Portfolio.find().populate('brand'); // Populate the brand field with brand information
+//     const portfolioData = portfolios.map((portfolio) => ({
+//       id: portfolio._id,
+//       image: portfolio.image,
+//       brand: portfolio.brand._id,
+//       brandName: portfolio.brand.name, // Include the brand name
+//       amount: portfolio.amount,
+//       name: portfolio.name,
+//       description: portfolio.description,
+//       quantity: portfolio.quantity
+//     }));
+//     res.json(portfolioData);
+//   } catch (error) {
+//     console.error('Error fetching images:', error);
+//     res.status(500).json({ error: 'An error occurred' });
+//   }
+// })
 
 app.delete('/upload/:id', async (req, res) => {
   try {
