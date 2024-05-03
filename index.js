@@ -100,10 +100,12 @@ app.get('/profile', (req,res) => {
 app.post('/post', uploadMiddleware.single('file'), async (req,res) => {
   try {
     const {name,summary,amount} = req.body;
-    const cover = req.file.path
+    const cover = req.file.buffer
 
-    console.log(cover)
-    const result = await cloudinary.uploader.upload(cover, {
+    const b64Image = Buffer.from(image).toString('base64');
+    const dataURI = `data:${contentType};base64,${b64Image}`;
+
+    const result = await cloudinary.uploader.upload(dataURI, {
         folder: 'blog'
     });
 
