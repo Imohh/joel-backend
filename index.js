@@ -100,9 +100,10 @@ app.get('/profile', (req,res) => {
 app.post('/post', uploadMiddleware.single('file'), async (req,res) => {
   try {
     const {name,summary,amount} = req.body;
-    const cover = req.file.buffer
+    const cover = req.file.buffer;
+    const contentType = req.file.mimetype
 
-    const b64Image = Buffer.from(image).toString('base64');
+    const b64Image = Buffer.from(cover).toString('base64');
     const dataURI = `data:${contentType};base64,${b64Image}`;
 
     const result = await cloudinary.uploader.upload(dataURI, {
@@ -117,6 +118,7 @@ app.post('/post', uploadMiddleware.single('file'), async (req,res) => {
       summary,
       amount,
       cover: result.url,
+      contentType
     });
 
     res.json(postDoc);
@@ -639,25 +641,19 @@ app.post('/success', async (req, res) => {
   }
 });
 
-// app.post('/success', async (req, res) => {
-//   try {
-//     const { cartItem } = req.body;
-    
-//     const formEntry = new Order({
-//       // name: formData.name,
-//       // address: formData.address,
-//       // email: formData.email,
-//       // phone: formData.phone,
-//       cartInfo: cartItem,
-//       // Add any other necessary fields
-//     });
-//     await formEntry.save();
-//     res.status(200).json({ success: true, message: 'Order saved successfully.' });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ success: false, message: 'An error occurred while saving the order.' });
-//   }
-// });
+app.get('/orders', async (req, res) => {
+  try {
+    // Fetch all orders from MongoDB
+    const orders = await Order.find();
+
+    res.status(200).json({ success: true, orders });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'An error occurred while fetching orders.' });
+  }
+});
+
+
 
 
 
