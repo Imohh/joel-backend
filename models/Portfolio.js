@@ -10,7 +10,8 @@ const PortfolioSchema = new Schema({
   description: String,
   amount: String,
   quantity: String,
-  contentType: { type: String }
+  slug: String,
+  contentType: { type: String },
 });
 
 const PortfolioModel = model('Portfolio', PortfolioSchema);

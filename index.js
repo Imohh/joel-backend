@@ -48,7 +48,7 @@ cloudinary.config({
 });
 
 // app.use(cors({credentials:true,origin:'http://localhost:3000'}));
-app.use(cors({credentials:true,origin:'https://joel-photography.vercel.app'}));
+app.use(cors({credentials:true,origin:'https://joelstudio.vercel.app'}));
 app.use(express.json());
 app.use(cookieParser());
 // app.use('/uploads', express.static(__dirname + '/uploads'))
@@ -482,7 +482,7 @@ app.post('/upload/:brandId', uploadMiddleware.single('image'), async (req, res) 
     }
 
     const result = await cloudinary.uploader.upload(dataURI, {
-      folder: 'portfolio',
+      folder: 'joel portfolio',
       resource_type: 'auto',
     });
 
