@@ -47,8 +47,8 @@ cloudinary.config({
   api_secret: '-mnTD9Y96yxJLY_SESRwp34Gb38', // JWT Secret
 });
 
-// app.use(cors({credentials:true,origin:'http://localhost:3000'}));
-app.use(cors({credentials:true,origin:'https://joelstudio.vercel.app'}));
+app.use(cors({credentials:true,origin:'http://localhost:3000'}));
+// app.use(cors({credentials:true,origin:'https://joelstudio.vercel.app'}));
 app.use(express.json());
 app.use(cookieParser());
 // app.use('/uploads', express.static(__dirname + '/uploads'))
@@ -321,7 +321,7 @@ app.delete('/brands/:id', async (req, res) => {
 });
 
 // CREATE A NEW SUB FPORTFOLIO(sub-brand) UNDER A PORTFOLIO(brand)
-app.post('/subbrands/:brandId', async (req, res) => {
+app.post('/subbrand/:brandId', async (req, res) => {
   try {
     const brand = await Brand.findById(req.params.brandId);
     if (!brand) return res.status(404).json({ error: 'Brand not found' });
@@ -334,10 +334,10 @@ app.post('/subbrands/:brandId', async (req, res) => {
   }
 });
 
-app.get('/subbrands/:brandId', async (req, res) => {
+app.get('/subbrand/:brandId', async (req, res) => {
   try {
     const brandId = req.params.brandId;
-    const brand = await Brand.findById(brandId);
+    const brand = await SubBrand.findById(brandId);
 
     if (!brand) {
       return res.status(404).json({ message: 'Brand not found' });
@@ -349,9 +349,139 @@ app.get('/subbrands/:brandId', async (req, res) => {
     console.error('Error fetching brand:', error)
     res.status(500).json({message: 'Internal server error'});
   }
-
-
 });
+
+app.get('/subbrand', async (req,res) => {
+  try {
+    const subbrands = await SubBrand.find().populate('brand'); // Populate the brand field with brand information
+    const subbrandData = subbrands.map((subbrand) => ({
+      _id: subbrand._id,
+      name: subbrand.name,
+      brand: subbrand.brand._id,
+      brandName: subbrand.brand.name, // Include the brand name
+    }));
+    res.json(subbrandData);
+  } catch (error) {
+    console.error('Error fetching images:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+})
+
+// Delete a subbrand by ID
+app.delete('/subbrand/:id', async (req, res) => {
+  try {
+    const brand = await SubBrand.findByIdAndDelete(req.params.id);
+    if (!brand) return res.status(404).json({ error: 'Brand not found' });
+    res.json({ message: 'Brand deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+// Edit/Update a brand by ID
+app.put('/subbrand/:id', async (req, res) => {
+  try {
+    const subbrand = await SubBrand.findByIdAndUpdate(req.params.id, { name: req.body.name }, { new: true });
+    if (!subbrand) return res.status(404).json({ error: 'Subbrand not found' });
+    res.json(subbrand);
+  } catch (error) {
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+
+
+
+
+
+
+// UPLOAD PICTURE TO SUB PORTFOLIO UNDER PORTFOLIO
+app.post('/subbrands/:subbrandId', uploadMiddleware.single('image'), async (req, res) => {
+  try {
+    const subbrandId = req.params.subbrandId;
+    const image = req.file.buffer;
+    const contentType = req.file.mimetype;
+    // const { name, description, amount, quantity } = req.body;
+    const name = req.body
+
+    // Ensure the subbrandId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(subbrandId)) {
+      return res.status(400).json({ error: 'Invalid subbrand ID format' });
+    }
+
+
+
+    const b64Image = Buffer.from(image).toString('base64');
+    const dataURI = `data:${contentType};base64,${b64Image}`;
+
+    // Ensure the brand exists
+    const subbrand = await SubBrand.findById(subbrandId);
+    if (!subbrand) {
+      return res.status(404).json({ error: 'subBrand not found' });
+    }
+
+    const result = await cloudinary.uploader.upload(dataURI, {
+      folder: 'joel sub portfolio',
+      resource_type: 'auto',
+    });
+
+    // const newId = new Date().getTime();
+
+    // Create a new portfolio entry for the image
+    const subBrandPicture = new SubBrandImageUpload({ 
+    //const portfolio = new Portfolio({
+      _id: new mongoose.Types.ObjectId(),
+      image: result.url,
+      subbrand: subbrandId,
+      contentType,
+      name: subbrand.name, // Include required name field
+      brand: subbrand.brand,
+    });
+
+    const savedSubbrand = await subBrandPicture.save();
+
+    res.json({ 
+      success: true,
+      message: 'Image uploaded successfully',
+      portfolio: savedSubbrand 
+    });
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+
+
+
+
+app.get('/subbrands/:subbrandId/images', async (req, res) => {
+  try {
+    const subbrandId = req.params.subbrandId;
+
+    // Validate the subbrandId
+    if (!mongoose.Types.ObjectId.isValid(subbrandId)) {
+      return res.status(400).json({ error: 'Invalid subbrand ID format' });
+    }
+
+    // Fetch all images associated with the subbrandId
+    const images = await SubBrandImageUpload.find({ subbrand: subbrandId });
+
+    if (!images || images.length === 0) {
+      return res.status(404).json({ error: 'No images found for this subbrand' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Images fetched successfully',
+      images,
+    });
+  } catch (error) {
+    console.error('Error fetching images:', error);
+    res.status(500).json({ error: 'An error occurred while fetching images' });
+  }
+});
+
 
 app.get('/subbrands', async (req,res) => {
   try {
