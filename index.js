@@ -454,50 +454,29 @@ app.post('/subbrands/:subbrandId', uploadMiddleware.single('image'), async (req,
 
 
 
-
-app.get('/subbrands/:subbrandId/images', async (req, res) => {
+app.get('/subbrands', async (req, res) => {
   try {
-    const subbrandId = req.params.subbrandId;
+    const subbrands = await SubBrandImageUpload.find()
+      .populate('brand') // Populate the brand field with brand information
+      .populate('subbrand'); // Optionally populate the subbrand field
 
-    // Validate the subbrandId
-    if (!mongoose.Types.ObjectId.isValid(subbrandId)) {
-      return res.status(400).json({ error: 'Invalid subbrand ID format' });
-    }
-
-    // Fetch all images associated with the subbrandId
-    const images = await SubBrandImageUpload.find({ subbrand: subbrandId });
-
-    if (!images || images.length === 0) {
-      return res.status(404).json({ error: 'No images found for this subbrand' });
-    }
-
-    res.json({
-      success: true,
-      message: 'Images fetched successfully',
-      images,
-    });
-  } catch (error) {
-    console.error('Error fetching images:', error);
-    res.status(500).json({ error: 'An error occurred while fetching images' });
-  }
-});
-
-
-app.get('/subbrands', async (req,res) => {
-  try {
-    const subbrands = await SubBrand.find().populate('brand'); // Populate the brand field with brand information
     const subbrandData = subbrands.map((subbrand) => ({
       _id: subbrand._id,
+      image: subbrand.image,
+      contentType: subbrand.contentType,
       name: subbrand.name,
-      brand: subbrand.brand._id,
-      brandName: subbrand.brand.name, // Include the brand name
+      brand: subbrand.brand ? subbrand.brand._id : null,
+      brandName: subbrand.brand ? subbrand.brand.name : null, // Include the brand name if it exists
+      subbrand: subbrand.subbrand ? subbrand.subbrand._id : null,
+      subbrandName: subbrand.subbrand ? subbrand.subbrand.name : null, // Include the subbrand name if it exists
     }));
     res.json(subbrandData);
   } catch (error) {
-    console.error('Error fetching images:', error);
-    res.status(500).json({ error: 'An error occurred' });
+    console.error('Error fetching subbrands:', error);
+    res.status(500).json({ error: 'An error occurred while fetching subbrands' });
   }
-})
+});
+
 
 // Delete a subbrand by ID
 app.delete('/subbrands/:id', async (req, res) => {
