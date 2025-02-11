@@ -48,7 +48,23 @@ cloudinary.config({
 });
 
 // app.use(cors({credentials:true,origin:'http://localhost:3000'}));
-app.use(cors({credentials:true,origin:'https://joelstudio.vercel.app'}));
+// app.use(cors({credentials:true,origin:'https://joelstudio.vercel.app'}));
+
+const allowedOrigins = process.env.ALLOWED_ORIGIN.split(',');
+
+app.use(cors({
+  credentials: true,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
+
+
+
 app.use(express.json());
 app.use(cookieParser());
 // app.use('/uploads', express.static(__dirname + '/uploads'))
