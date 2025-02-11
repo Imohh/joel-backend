@@ -50,7 +50,7 @@ cloudinary.config({
 // app.use(cors({credentials:true,origin:'http://localhost:3000'}));
 // app.use(cors({credentials:true,origin:'https://joelstudio.vercel.app'}));
 
-const allowedOrigins = process.env.ALLOWED_ORIGIN.split(',');
+const allowedOrigins = process.env.ALLOWED_ORIGIN
 
 app.use(cors({
   credentials: true,
