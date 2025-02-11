@@ -20,6 +20,7 @@ const cookieParser = require('cookie-parser');
 const Multer = require('multer')
 const fs = require('fs');
 const cloudinary = require('cloudinary').v2
+require('dotenv').config();
 
 const salt = bcrypt.genSaltSync(10);
 const secret = 'asdfe45we45w345wegw345werjktjwertkj';
@@ -47,9 +48,6 @@ cloudinary.config({
   api_secret: '-mnTD9Y96yxJLY_SESRwp34Gb38', // JWT Secret
 });
 
-// app.use(cors({credentials:true,origin:'http://localhost:3000'}));
-// app.use(cors({credentials:true,origin:'https://joelstudio.vercel.app'}));
-
 const allowedOrigins = process.env.ALLOWED_ORIGIN
 
 app.use(cors({
@@ -69,7 +67,21 @@ app.use(express.json());
 app.use(cookieParser());
 // app.use('/uploads', express.static(__dirname + '/uploads'))
 
-mongoose.connect('mongodb+srv://imoh88:iamnotorious@cluster0.tjyapzm.mongodb.net/joel?retryWrites=true&w=majority');
+// mongoose.connect(process.env.MONGO_URI);
+
+if (!process.env.MONGO_URI) {
+  console.error('MONGO_URI is not defined in environment variables');
+  process.exit(1); // Exit the process with an error code
+}
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('Connected to MongoDB successfully');
+  })
+  .catch((error) => {
+    console.error('MongoDB connection error:', error);
+  });
+
 
 app.post('/register', async (req,res) => {
   const {username,password} = req.body
