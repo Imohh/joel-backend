@@ -47,8 +47,8 @@ cloudinary.config({
   api_secret: '-mnTD9Y96yxJLY_SESRwp34Gb38', // JWT Secret
 });
 
-app.use(cors({credentials:true,origin:'http://localhost:3000'}));
-// app.use(cors({credentials:true,origin:'https://joelstudio.vercel.app'}));
+// app.use(cors({credentials:true,origin:'http://localhost:3000'}));
+app.use(cors({credentials:true,origin:'https://joelstudio.vercel.app'}));
 app.use(express.json());
 app.use(cookieParser());
 // app.use('/uploads', express.static(__dirname + '/uploads'))
@@ -321,18 +321,55 @@ app.delete('/brands/:id', async (req, res) => {
 });
 
 // CREATE A NEW SUB FPORTFOLIO(sub-brand) UNDER A PORTFOLIO(brand)
-app.post('/subbrand/:brandId', async (req, res) => {
-  try {
-    const brand = await Brand.findById(req.params.brandId);
-    if (!brand) return res.status(404).json({ error: 'Brand not found' });
+// app.post('/subbrand/:brandId', async (req, res) => {
+//   try {
+//     const brand = await Brand.findById(req.params.brandId);
+//     if (!brand) return res.status(404).json({ error: 'Brand not found' });
 
-    const subBrand = new SubBrand({ name: req.body.name, brand: brand._id });
-    await subBrand.save();
-    res.status(201).json(subBrand);
-  } catch (error) {
-    res.status(500).json({ error: 'An error occurred' });
-  }
+//     const subBrand = new SubBrand({ 
+//       name: req.body.name, 
+//       description: req.body.description,
+//       brand: brand._id,
+//     });
+//     await subBrand.save();
+//     res.status(201).json(subBrand);
+//   } catch (error) {
+//     res.status(500).json({ error: 'An error occurred' });
+//   }
+// });
+
+app.post('/subbrand/:brandId', async (req, res) => {
+    try {
+        const { brandId } = req.params;
+        const { name, description } = req.body;
+
+        // First verify that the brand exists
+        const brand = await Brand.findById(brandId);
+        if (!brand) {
+            return res.status(404).json({ message: 'Brand not found' });
+        }
+
+        // Create new subbrand
+        const subbrand = new SubBrand({
+            name,
+            description,
+            brand: brandId,
+            brandName: brand.name // Store the brand name for easier reference
+        });
+
+        // Save the subbrand
+        const savedSubbrand = await subbrand.save();
+
+        res.status(201).json(savedSubbrand);
+    } catch (error) {
+        console.error('Error creating subbrand:', error);
+        res.status(500).json({ 
+            message: 'Error creating subbrand', 
+            error: error.message 
+        });
+    }
 });
+
 
 app.get('/subbrand/:brandId', async (req, res) => {
   try {
@@ -450,6 +487,47 @@ app.post('/subbrands/:subbrandId', uploadMiddleware.single('image'), async (req,
     res.status(500).json({ error: 'An error occurred' });
   }
 });
+
+app.get('/subbrands/:brandId', async (req, res) => {
+  try {
+    const { brandId } = req.params;
+    const subbrands = await SubBrand.find({ brand: brandId });
+
+    if (!subbrands.length) {
+      return res.status(404).json({ message: 'No subbrands found' });
+    }
+
+    res.json(subbrands);
+  } catch (error) {
+    console.error('Error fetching subbrands:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.get('/brands/:brandId/subbrands', async (req, res) => {
+    try {
+        const { brandId } = req.params;
+
+        // Ensure the brand exists
+        const brand = await Brand.findById(brandId);
+        if (!brand) {
+            return res.status(404).json({ message: 'Brand not found' });
+        }
+
+        // Fetch subbrands linked to this brand (Fix: Change brandId to brand)
+        const subbrands = await SubBrand.find({ brand: brand });
+
+        if (subbrands.length === 0) {
+            return res.status(404).json({ message: 'No subbrands found for this brand' });
+        }
+
+        res.status(200).json(subbrands);
+    } catch (error) {
+        console.error('Error fetching subbrands:', error);
+        res.status(500).json({ message: 'Error fetching subbrands', error: error.message });
+    }
+});
+
 
 
 
