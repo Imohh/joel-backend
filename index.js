@@ -328,6 +328,16 @@ app.get('/brands', async (req, res) => {
   }
 });
 
+app.get('/brandsId', async (req, res) => {
+  try {
+    const brands = await Brand.find({}, 'name _id'); // Fetch only brand name and id
+    res.json(brands);
+  } catch (error) {
+    console.error('Error fetching brands:', error);
+    res.status(500).json({ error: 'An error occurred while fetching brands' });
+  }
+});
+
 // Edit/Update a brand by ID
 app.put('/brands/:id', async (req, res) => {
   try {
@@ -776,23 +786,106 @@ app.post('/uploader/:brandId/:subbrandId', uploadMiddleware.single('image'), asy
   }
 });
 
-app.get('/uploader/:brandId/:subbrandId', async (req, res) => {
+// app.get('/uploader/:brandId/:subbrandId', async (req, res) => {
+//   try {
+//     const { brandId, subbrandId } = req.params;
+
+//     // Find portfolio entries that match the brand and subbrand
+//     const portfolios = await Portfolier.find({ brand: brandId, subbrand: subbrandId });
+
+//     if (portfolios.length === 0) {
+//       return res.status(404).json({ message: 'No portfolio entries found for this brand and subbrand' });
+//     }
+
+//     res.json({ success: true, portfolios });
+//   } catch (error) {
+//     console.error('Error fetching portfolio entries:', error);
+//     res.status(500).json({ error: 'An error occurred while fetching portfolios' });
+//   }
+// });
+
+
+app.get('/uploader/brand/:brandName', async (req, res) => {
   try {
-    const { brandId, subbrandId } = req.params;
+    const { brandName } = req.params;
+    console.log(`Fetching images for brand: ${brandName}`);
 
-    // Find portfolio entries that match the brand and subbrand
-    const portfolios = await Portfolier.find({ brand: brandId, subbrand: subbrandId });
+    const portfoliers = await Portfolier.find({ brandName })
+      .populate('brand', 'name')
+      .populate('subbrand', 'name');
 
-    if (portfolios.length === 0) {
-      return res.status(404).json({ message: 'No portfolio entries found for this brand and subbrand' });
+    // Filter portfolios to match the requested brand name
+    const filteredPortfolios = portfoliers.filter(
+      (portfolio) => portfolio.brand?.name.toLowerCase() === brandName.toLowerCase()
+    );
+
+    if (!portfoliers.length) {
+      console.log('No images found for this brand');
+      return res.status(404).json({ error: 'No images found for this brand' });
     }
 
-    res.json({ success: true, portfolios });
+    const portfolioData = portfoliers.map((portfolio) => ({
+      id: portfolio._id,
+      image: portfolio.image,
+      brand: portfolio.brand ? portfolio.brand._id : null,
+      brandName: portfolio.brand ? portfolio.brand.name : null,
+      subbrand: portfolio.subbrand ? portfolio.subbrand._id : null,
+      subbrandName: portfolio.subbrand ? portfolio.subbrand.name : null,
+      contentType: portfolio.contentType,
+    }));
+
+    res.json(portfolioData);
   } catch (error) {
-    console.error('Error fetching portfolio entries:', error);
-    res.status(500).json({ error: 'An error occurred while fetching portfolios' });
+    console.error('Error fetching brand images:', error);
+    res.status(500).json({ error: 'An error occurred while fetching images' });
   }
 });
+
+
+//PORTFOLIER USEPARAMS TEST
+app.get("/portfolier/:brandName", async (req, res) => {
+  try {
+    const { brandName } = req.params;
+
+    console.log("Received brandName:", brandName);
+
+    // 1️⃣ Find the brand by name to get its ID
+    const brand = await Brand.findOne({ name: brandName });
+
+    if (!brand) {
+      return res.status(404).json({ message: "Brand not found" });
+    }
+
+    console.log("Found Brand:", brand);
+
+    // 2️⃣ Use the brand ID to find portfolios
+    const portfolios = await Portfolier.find({ brand: brand._id })
+      .populate("brand", "name") // Populate brand details
+      .populate("subbrand", "name"); // Populate subbrand details
+
+    console.log("Fetched Portfolios:", portfolios);
+
+    // 3️⃣ Find all subbrands related to this brand
+    const subbrands = await SubBrand.find({ brand: brand._id });
+
+    console.log("Fetched SubBrands:", subbrands);
+
+    // 4️⃣ If no portfolios are found, return a message
+    if (!portfolios.length) {
+      return res.status(404).json({ message: "No portfolios found for this brand" });
+    }
+
+    // 5️⃣ Return both portfolios and subbrands
+    res.json({ portfolios, subbrands });
+
+  } catch (error) {
+    console.error("Error fetching portfolios:", error);
+    res.status(500).json({ error: "An error occurred while fetching portfolios" });
+  }
+});
+
+
+
 
 
 
@@ -851,7 +944,6 @@ app.get('/uploader', async (req, res) => {
       id: portfolio._id,
       image: portfolio.image,
       brand: portfolio.brand ? portfolio.brand._id : null,
-      brandName: portfolio.brand ? portfolio.brand.name : null,
       subbrand: portfolio.subbrand ? portfolio.subbrand._id : null,
       subbrandName: portfolio.subbrand ? portfolio.subbrand.name : null,
       contentType: portfolio.contentType,
