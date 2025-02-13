@@ -6,11 +6,6 @@ const PortfolioSchema = new Schema({
   image: { type: String, required: true },
   brand: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand', required: true },
   brandName: String,
-  name: String,
-  description: String,
-  amount: String,
-  quantity: String,
-  slug: String,
   contentType: { type: String },
 });
 

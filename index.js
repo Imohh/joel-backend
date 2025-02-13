@@ -9,6 +9,7 @@ const Subscribe = require('./models/Subscribe');
 const Brand = require('./models/Brand');
 const SubBrand = require('./models/SubBrand');
 const Portfolio = require('./models/Portfolio');
+const Portfolier = require('./models/Portfolier');
 const Order = require('./models/Order');
 const SubPortfolio = require('./models/SubPortfolio');
 const SubBrandImageUpload = require('./models/SubBrandImageUpload');
@@ -49,6 +50,7 @@ cloudinary.config({
 });
 
 const allowedOrigins = process.env.ALLOWED_ORIGIN
+// const allowedOrigins = 'http://localhost:3000'
 
 app.use(cors({
   credentials: true,
@@ -65,7 +67,6 @@ app.use(cors({
 
 app.use(express.json());
 app.use(cookieParser());
-// app.use('/uploads', express.static(__dirname + '/uploads'))
 
 // mongoose.connect(process.env.MONGO_URI);
 
@@ -208,10 +209,11 @@ app.delete('/post/:id', async (req, res) => {
 // CONTACT FORM
 app.post('/contact', async (req, res) => {
   try {
-    const { fullName, email, message } = req.body;
+    const { fullName, email, phone, message } = req.body;
     const formEntry = new Contact({
       fullName,
       email,
+      phone,
       message,
     });
     await formEntry.save();
@@ -423,7 +425,8 @@ app.get('/subbrand', async (req,res) => {
       _id: subbrand._id,
       name: subbrand.name,
       brand: subbrand.brand._id,
-      brandName: subbrand.brand.name, // Include the brand name
+      brandName: subbrand.brand.name,
+      description: subbrand.description,
     }));
     res.json(subbrandData);
   } catch (error) {
@@ -679,13 +682,12 @@ app.delete('/uploads/:id', async (req, res) => {
 
 
 
-// POST REQUEST FOR UPLOADING IMAGE to a brand by ID
+// COVER IMAGE ROUTE
 app.post('/upload/:brandId', uploadMiddleware.single('image'), async (req, res) => {
   try {
     const brandId = req.params.brandId;
     const image = req.file.buffer;
     const contentType = req.file.mimetype;
-    const { name, description, amount, quantity } = req.body;
 
     const b64Image = Buffer.from(image).toString('base64');
     const dataURI = `data:${contentType};base64,${b64Image}`;
@@ -697,7 +699,7 @@ app.post('/upload/:brandId', uploadMiddleware.single('image'), async (req, res) 
     }
 
     const result = await cloudinary.uploader.upload(dataURI, {
-      folder: 'joel portfolio',
+      folder: 'joel cover',
       resource_type: 'auto',
     });
 
@@ -709,10 +711,6 @@ app.post('/upload/:brandId', uploadMiddleware.single('image'), async (req, res) 
       image: result.url,
       brand: brandId,
       contentType,
-      name,
-      description,
-      amount,
-      quantity
     });
 
     const savedPortfolio = await portfolio.save();
@@ -727,6 +725,77 @@ app.post('/upload/:brandId', uploadMiddleware.single('image'), async (req, res) 
     res.status(500).json({ error: 'An error occurred' });
   }
 });
+
+
+
+// UPLOAD IMAGE TO PORTFOLIO
+app.post('/uploader/:brandId/:subbrandId', uploadMiddleware.single('image'), async (req, res) => {
+  try {
+    const { brandId, subbrandId } = req.params;
+    const image = req.file.buffer;
+    const contentType = req.file.mimetype;
+
+    const b64Image = Buffer.from(image).toString('base64');
+    const dataURI = `data:${contentType};base64,${b64Image}`;
+
+    // Ensure the brand and subbrand exist
+    const brand = await Brand.findById(brandId);
+    if (!brand) {
+      return res.status(404).json({ error: 'Brand not found' });
+    }
+
+    const subbrand = await SubBrand.findById(subbrandId);
+    if (!subbrand) {
+      return res.status(404).json({ error: 'Sub-brand not found' });
+    }
+
+    // Upload image to Cloudinary
+    const result = await cloudinary.uploader.upload(dataURI, {
+      folder: 'joel portfolio',
+      resource_type: 'auto',
+    });
+
+    // Create a new portfolio entry with brand and subbrand references
+    const portfolio = new Portfolier({
+      image: result.url,
+      brand: brandId,
+      subbrand: subbrandId,
+      contentType,
+    });
+
+    const savedPortfolio = await portfolio.save();
+
+    res.json({
+      success: true,
+      message: 'Image uploaded successfully',
+      portfolio: savedPortfolio,
+    });
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+app.get('/uploader/:brandId/:subbrandId', async (req, res) => {
+  try {
+    const { brandId, subbrandId } = req.params;
+
+    // Find portfolio entries that match the brand and subbrand
+    const portfolios = await Portfolier.find({ brand: brandId, subbrand: subbrandId });
+
+    if (portfolios.length === 0) {
+      return res.status(404).json({ message: 'No portfolio entries found for this brand and subbrand' });
+    }
+
+    res.json({ success: true, portfolios });
+  } catch (error) {
+    console.error('Error fetching portfolio entries:', error);
+    res.status(500).json({ error: 'An error occurred while fetching portfolios' });
+  }
+});
+
+
+
 
 // Define a route to handle requests for fetching product details based on product ID
 app.get('/products/:productId', async (req, res) => {
@@ -772,6 +841,30 @@ app.get('/upload', async (req,res) => {
   }
 })
 
+app.get('/uploader', async (req, res) => {
+  try {
+    const portfolios = await Portfolier.find()
+      .populate('brand', 'name') // Populate brand and only fetch the name field
+      .populate('subbrand', 'name'); // Populate subbrand and only fetch the name field
+
+    const portfolioData = portfolios.map((portfolio) => ({
+      id: portfolio._id,
+      image: portfolio.image,
+      brand: portfolio.brand ? portfolio.brand._id : null,
+      brandName: portfolio.brand ? portfolio.brand.name : null,
+      subbrand: portfolio.subbrand ? portfolio.subbrand._id : null,
+      subbrandName: portfolio.subbrand ? portfolio.subbrand.name : null,
+      contentType: portfolio.contentType,
+    }));
+
+    res.json(portfolioData);
+  } catch (error) {
+    console.error('Error fetching images:', error);
+    res.status(500).json({ error: 'An error occurred while fetching portfolios' });
+  }
+});
+
+
 
 // app.get('/upload', async (req,res) => {
 //   try {
@@ -795,13 +888,20 @@ app.get('/upload', async (req,res) => {
 
 app.delete('/upload/:id', async (req, res) => {
   try {
+    console.log("Delete request received for ID:", req.params.id);
+
     const portfolio = await Portfolio.findByIdAndDelete(req.params.id);
-    if (!portfolio) return res.status(404).json({ error: 'portfolio not found' });
-    res.json({ message: 'portfolio image deleted successfully' });
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    res.json({ message: 'Portfolio image deleted successfully' });
   } catch (error) {
+    console.error('Error deleting portfolio:', error);
     res.status(500).json({ error: 'An error occurred' });
   }
 });
+
 
 
 
