@@ -885,6 +885,74 @@ app.get("/portfolier/:brandName", async (req, res) => {
 });
 
 
+// Get all images for a specific subbrand under a brand
+app.get('/portfolier/:brandName/subbrand/:subbrandId', async (req, res) => {
+  try {
+    const { brandName, subbrandId } = req.params;
+
+    // ✅ Check if subbrandId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(subbrandId)) {
+      return res.status(400).json({ message: "Invalid subbrand ID" });
+    }
+
+    // ✅ Find portfolios that match both brandName and subbrandId
+    const portfolios = await Portfolier.find({
+      brandName: { $regex: new RegExp(`^${brandName}$`, "i") }, // Case insensitive brandName search
+      subbrand: subbrandId, // Directly match the subbrandId field in Portfolier
+    }).populate('subbrand', 'name'); // Populate subbrand name
+
+    if (!portfolios.length) {
+      return res.status(404).json({ message: "No portfolios found for this subbrand" });
+    }
+
+    // ✅ Extract images from the filtered portfolios
+    const images = portfolios.flatMap((portfolio) =>
+      Array.isArray(portfolio.image) ? portfolio.image : [portfolio.image]
+    );
+
+    res.json({ subbrandId, images });
+  } catch (error) {
+    console.error("Error fetching subbrand details:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
+
+
+app.get('/uploader/:subbrandName', async (req, res) => {
+  try {
+    const { subbrandName } = req.params;
+
+    const subbrand = await SubBrand.findOne({ name: subbrandName });
+    if (!subbrand) return res.status(404).json({ error: 'SubBrand not found' });
+
+    const portfolios = await Portfolier.find({ subbrand: subbrand._id })
+      .populate('brand', 'name')
+      .populate('subbrand', 'name');
+
+    res.json({
+      description: subbrand.description, // Include description
+      portfolios: portfolios.map((portfolio) => ({
+        id: portfolio._id,
+        image: portfolio.image,
+        subbrandName: portfolio.subbrand ? portfolio.subbrand.name : null
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching portfolio:', error);
+    res.status(500).json({ error: 'An error occurred while fetching data' });
+  }
+});
+
+
+
+
+
+
+
+
 
 
 
@@ -957,27 +1025,6 @@ app.get('/uploader', async (req, res) => {
 });
 
 
-
-// app.get('/upload', async (req,res) => {
-//   try {
-//     const portfolios = await Portfolio.find().populate('brand'); // Populate the brand field with brand information
-//     const portfolioData = portfolios.map((portfolio) => ({
-//       id: portfolio._id,
-//       image: portfolio.image,
-//       brand: portfolio.brand._id,
-//       brandName: portfolio.brand.name, // Include the brand name
-//       amount: portfolio.amount,
-//       name: portfolio.name,
-//       description: portfolio.description,
-//       quantity: portfolio.quantity
-//     }));
-//     res.json(portfolioData);
-//   } catch (error) {
-//     console.error('Error fetching images:', error);
-//     res.status(500).json({ error: 'An error occurred' });
-//   }
-// })
-
 app.delete('/upload/:id', async (req, res) => {
   try {
     console.log("Delete request received for ID:", req.params.id);
@@ -993,8 +1040,6 @@ app.delete('/upload/:id', async (req, res) => {
     res.status(500).json({ error: 'An error occurred' });
   }
 });
-
-
 
 
 app.get('/upload/:brandName', async (req, res) => {
