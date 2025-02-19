@@ -3,12 +3,14 @@ const cors = require('cors');
 const mongoose= require("mongoose");
 const User = require('./models/User');
 const Post = require('./models/Post');
+const Comment = require('./models/Comment');
 const Contact = require('./models/Contact');
 const Academy = require('./models/Academy');
 const Subscribe = require('./models/Subscribe');
 const Brand = require('./models/Brand');
 const SubBrand = require('./models/SubBrand');
 const Portfolio = require('./models/Portfolio');
+const Product = require('./models/Product');
 const Portfolier = require('./models/Portfolier');
 const Order = require('./models/Order');
 const SubPortfolio = require('./models/SubPortfolio');
@@ -26,6 +28,8 @@ require('dotenv').config();
 const salt = bcrypt.genSaltSync(10);
 const secret = 'asdfe45we45w345wegw345werjktjwertkj';
 
+
+const JWT_SECRET = process.env.JWT_SECRET || "gfdtrxtrxtxtxxfs";
 
 // const storage = multer.diskStorage({
 //   destination(req, file, cb) {
@@ -49,8 +53,8 @@ cloudinary.config({
   api_secret: '-mnTD9Y96yxJLY_SESRwp34Gb38', // JWT Secret
 });
 
-const allowedOrigins = process.env.ALLOWED_ORIGIN
-// const allowedOrigins = 'http://localhost:3000'
+// const allowedOrigins = process.env.ALLOWED_ORIGIN
+const allowedOrigins = 'https://joelstudio.vercel.app'
 
 app.use(cors({
   credentials: true,
@@ -84,103 +88,387 @@ mongoose.connect(process.env.MONGO_URI)
   });
 
 
-app.post('/register', async (req,res) => {
-  const {username,password} = req.body
-  try {
-    const userDoc = await User.create({
-      username, 
-      password:bcrypt.hashSync(password,salt)
-    })
-    res.json(userDoc)
-  } catch(e) {
-    res.status(400).json(e)
-  }
-})
 
-app.post('/login', async (req,res) => {
-  const {username,password} = req.body;
-  const userDoc = await User.findOne({username});
-  const passOk = bcrypt.compareSync(password, userDoc.password);
-  if (passOk) {
-    // logged in
-    jwt.sign({username,id:userDoc._id}, secret, {}, (err,token) => {
-      if (err) throw err;
-      res.cookie('token', token).json('ok')
+
+// Register
+app.post('/register', async (req, res) => {
+  try {
+    const { name, email, password, username } = req.body;
+
+    console.log('Received registration data:', { name, email });
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Create new user
+    const user = new User({
+      name,
+      email,
+      password,
+      username: username || undefined, // Avoid saving null for optional fields
     });
-  } else {
-    res.status(400).json('wrong credentials');
+
+    console.log('Attempting to save user...');
+    await user.save();
+    console.log('User saved successfully');
+
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET || 'gfdtrxtrxtxtxxfs',
+      { expiresIn: '1h' }
+    );
+
+    res.status(201).json({ token });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 });
 
-app.get('/profile', (req,res) => {
-  const {token} = req.cookies;
-  console.log('Received token:', token);
-  jwt.verify(token, secret, {}, (err, info) => {
-    if (err) {
-      res.status(401).json('Unauthorized'); // Handle unauthorized error
-    } else {
-      res.json(info);
-    }
-  });
-})
 
 
 
-app.post('/post', uploadMiddleware.single('file'), async (req,res) => {
+
+// Generate a JWT token
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+};
+
+
+// Login
+app.post('/login', async (req, res) => {
   try {
-    const {name,summary,amount} = req.body;
-    const cover = req.file.buffer;
-    const contentType = req.file.mimetype
+    const { email, password } = req.body;
 
-    const b64Image = Buffer.from(cover).toString('base64');
-    const dataURI = `data:${contentType};base64,${b64Image}`;
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
 
-    const result = await cloudinary.uploader.upload(dataURI, {
-        folder: 'blog'
-    });
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    // Create JWT token
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET || 'gfdtrxtrxtxtxxfs',
+      { expiresIn: '1h' }
+    );
+
+    res.json({ token });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+app.get('/users', async (req, res) => {
+  try {
+    // Optional: Add authentication/authorization if needed to restrict this route.
+    const users = await User.find().select('-password');  // Exclude password for security reasons
+    
+    if (!users) {
+      return res.status(404).json({ message: 'No users found.' });
+    }
+
+    res.json(users);  // Send the list of users as the response
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// VERIFY TOKEN
+const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    // Debug log
+    console.log('Auth header received:', authHeader);
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    
+    // Debug verification
+    console.log('Attempting to verify token:', token.substring(0, 20) + '...');
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.id || decoded.userId;
+    
+    console.log('Decoded user ID:', req.userId);
+
+    if (!req.userId) {
+      throw new Error('No user ID found in token');
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Token verification error:', error);
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
+};
+
+
+// app.get('/user', verifyToken, async (req, res) => {
+//   try {
+//     // Find the user based on the ID in the token payload
+//     const user = await User.findById(req.user._id).select('-__v');
+//     if (!user) {
+//       return res.status(404).json({ error: 'User not found' });
+//     }
+//     res.status(200).json(user);
+//   } catch (error) {
+//     console.error('Error fetching user:', error);
+//     res.status(500).json({ error: 'Server error' });
+//   }
+// });
+
+// Update user name route
+app.put('/user/update-name', verifyToken, async (req, res) => {
+  try {
+    const { name } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ message: 'Name is required' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.userId,
+      { name },
+      { new: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Update name error:', error);
+    res.status(500).json({ message: 'Error updating name' });
+  }
+});
+
+// Add address route
+app.post('/user/add-address', verifyToken, async (req, res) => {
+  try {
+    const { address, country, countryCode } = req.body;
+    
+    if (!address || !country || !countryCode) {
+      return res.status(400).json({ message: 'Address is required' });
+    }
+
+    const newAddress = { address, country, countryCode };
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.userId,
+      { $push: { addresses: newAddress } },
+      { new: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Add address error:', error);
+    res.status(500).json({ message: 'Error adding address' });
+  }
+});
+
+app.get("/user/profile", verifyToken, async (req, res) => {
+  try {
+    console.log('Attempting to find user with ID:', req.userId);
+    
+    const user = await User.findById(req.userId).select("-password");
+    
+    if (!user) {
+      console.log('No user found for ID:', req.userId);
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    console.log('User found:', user._id);
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.delete('/user/delete-address', verifyToken, async (req, res) => {
+  try {
+    const { address } = req.body;
+
+    if (!address || !address.address || !address.country) {
+      return res.status(400).json({ message: 'Address and country are required' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.userId,
+      { $pull: { addresses: address } }, // Remove the specific address
+      { new: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Delete address error:', error);
+    res.status(500).json({ message: 'Error deleting address' });
+  }
+});
+
+
+
+
+
+app.post('/post', uploadMiddleware.array('images', 10), async (req, res) => {
+  try {
+    const { name, author, date, slug, content, coverImage } = req.body;
+
+    // Ensure `content` is parsed if it's a string
+    const parsedContent = typeof content === 'string' ? JSON.parse(content) : content;
+
+    // Handle cover image upload first if provided
+    let coverImageUrl = null;
+    if (coverImage && coverImage.startsWith('data:')) {
+      const result = await cloudinary.uploader.upload(coverImage, {
+        folder: 'sope blog covers',
+      });
+      coverImageUrl = result.url;
+    }
+
+    // Upload images from the content to Cloudinary
+    const processedContent = await Promise.all(
+      parsedContent.map(async (block) => {
+        if (block.type === 'image' && block.src.startsWith('data:')) {
+          try {
+            // Upload the base64 image to Cloudinary
+            const result = await cloudinary.uploader.upload(block.src, {
+              folder: 'sope blog',
+            });
+            console.log('Uploaded Image URL:', result.url); // Log the uploaded URL
+            return { ...block, src: result.url }; // Replace the src with the Cloudinary URL
+          } catch (err) {
+            console.error('Error uploading image to Cloudinary:', err);
+            return block; // Return the block as is if the upload fails
+          }
+        }
+        return block; // Return the block as is if it's not an image
+      })
+    );
+
 
     const productId = new Date().getTime();
 
+    // Create the post document
     const postDoc = await Post.create({
       id: productId,
       name,
-      summary,
-      amount,
-      cover: result.url,
-      contentType
+      author,
+      date,
+      slug,
+      coverImage: coverImageUrl,
+      content: processedContent, // Save the updated content with image URLs
     });
 
     res.json(postDoc);
-
   } catch (error) {
-      console.error('Error posting blog:', error);
-      res.status(500).json({ error: 'An error occurred' });
+    console.error('Error posting blog:', error);
+    res.status(500).json({ error: 'An error occurred while creating the post' });
+  }
+});
+
+app.post("/post/:slug/comment", async (req, res) => {
+  const { slug } = req.params;
+  const { name, email, text, website } = req.body;
+
+  // Validate input fields
+  if (!name || !email || !text || !website) {
+    return res.status(400).json({ error: "Name, email, and comment text are required." });
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: "Invalid email format." });
+  }
+
+  try {
+    // Create a new comment
+    const comment = new Comment({ slug, name, email, text, website });
+    await comment.save();
+
+    // Fetch all comments for the post after saving
+    const comments = await Comment.find({ slug }).sort({ createdAt: -1 });
+    res.status(201).json(comments);
+  } catch (error) {
+    console.error("Error adding comment:", error);
+    res.status(500).json({ error: "Failed to add comment." });
   }
 });
 
 
-app.put('/post',uploadMiddleware.single('file'), async (req,res) => {
+app.get("/post/:slug/comments", async (req, res) => {
+  const { slug } = req.params;
+
+  try {
+    const comments = await Comment.find({ slug }).sort({ createdAt: -1 });
+    res.status(200).json(comments);
+  } catch (error) {
+    console.error("Error fetching comments:", error);
+    res.status(500).json({ error: "Failed to fetch comments." });
+  }
+});
+
+
+app.put('/post', uploadMiddleware.single('file'), async (req, res) => {
   let newPath = null;
+
   if (req.file) {
-    const {originalname,path} = req.file;
+    const { originalname, path } = req.file;
     const parts = originalname.split('.');
     const ext = parts[parts.length - 1];
-    newPath = path+'.'+ext;
+    newPath = path + '.' + ext;
     fs.renameSync(path, newPath);
   }
-  
-    const {id,name,summary,content} = req.body;
+
+  const { id, name, summary, content } = req.body;
+
+  try {
     const postDoc = await Post.findById(id);
 
-    postDoc.update({
-      name,
-      summary,
-      content,
-      cover: newPath ? newPath : postDoc.cover,
-    });
+    if (!postDoc) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    // Update fields
+    postDoc.name = name;
+    postDoc.summary = summary;
+    postDoc.content = content;
+    if (newPath) {
+      postDoc.cover = newPath;
+    }
+
+    // Save the updated document
+    await postDoc.save();
 
     res.json(postDoc);
-
+  } catch (error) {
+    console.error('Error updating post:', error);
+    res.status(500).json({ error: 'An error occurred while updating the post' });
+  }
 });
 
 app.get('/post', async (req,res) => {
@@ -189,11 +477,24 @@ app.get('/post', async (req,res) => {
       .sort({createdAt: -1}))
 })
 
-app.get('/post/:id', async (req,res) => {
-  const {id} = req.params
-  const postDoc = await Post.findById(id)
-  res.json(postDoc)
-})
+// app.get('/post/:id', async (req,res) => {
+//   const {id} = req.params
+//   const postDoc = await Post.findById(id)
+//   res.json(postDoc)
+// })
+
+app.get('/post/:slug', async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const post = await Post.findOne({ slug });
+    if (!post) {
+      return res.status(404).send({ message: 'Thoughts not found' });
+    }
+    res.status(200).send(post);
+  } catch (error) {
+    res.status(500).send({ message: 'Error fetching blog post', error });
+  }
+});
 
 app.delete('/post/:id', async (req, res) => {
   try {
@@ -979,6 +1280,93 @@ app.get('/products/:productId', async (req, res) => {
     res.status(500).json({ error: 'An error occurred' });
   }
 });
+
+
+// upload to shop
+app.post('/product', uploadMiddleware.single('file'), async (req,res) => {
+  try {
+    const {name,summary,amount} = req.body;
+    const cover = req.file.buffer;
+    const contentType = req.file.mimetype;
+
+    // Generate a slug from the product name
+    const slugify = (name) =>
+      name.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+    const slug = slugify(name);
+
+    const b64Image = Buffer.from(cover).toString('base64');
+    const dataURI = `data:${contentType};base64,${b64Image}`;
+    const result = await cloudinary.uploader.upload(dataURI, {
+        folder: 'sope shop'
+    });
+
+    const productId = new Date().getTime();
+
+    // Extract sizes and prices from req.body
+    const sizes = [];
+    let i = 0;
+    while (req.body[`size_${i}_name`]) {
+      const sizeName = req.body[`size_${i}_name`];
+      const sizePrice = req.body[`size_${i}_price`];
+      sizes.push({ size: sizeName, price: sizePrice });
+      i++;
+    }
+
+    const productDoc = await Product.create({
+      id: productId,
+      name,
+      slug,
+      summary,
+      amount,
+      cover: result.url,
+      contentType,
+      sizes,
+    });
+
+    res.json(productDoc);
+
+  } catch (error) {
+      console.error('Error posting blog:', error);
+      res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+app.get('/product', async (req,res) => {
+  res.json(
+    await Product.find()
+      .sort({createdAt: -1}))
+})
+
+// TEST SLUG
+app.get('/product/:slug', async (req, res) => {
+  const slug = req.params.slug;
+
+  try {
+    const product = await Product.findOne({ slug });
+
+    if (product) {
+      res.json(product);
+    } else {
+      res.status(404).json({ error: 'Product not found' });
+    }
+  } catch (error) {
+    console.error('Error fetching product details:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+
+app.delete('/product/:id', async (req, res) => {
+  try {
+    const product = await Product.findByIdAndDelete(req.params.id);
+    if (!port) return res.status(404).json({ error: 'product not found' });
+    res.json({ message: 'product deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+
 
 
 
